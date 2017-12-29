@@ -1,5 +1,5 @@
 # 1. User Quick Guide
-[![License](https://img.shields.io/badge/license-BSD-blue.svg)](LICENSE)
+[![GitHub license](http://dmlc.github.io/img/apache2.svg)](./LICENSE)
 
 This Installation will help you get started to setup TensorFlowOnACL on RK3399 quickly.
 
