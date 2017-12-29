@@ -126,46 +126,46 @@ This Installation will help you get started to setup TensorFlowOnACL on RK3399 q
 
   Open “/home/xxx/.cache/bazel/_bazel_xxxx/e744db622218e02ee1e2cbf3b8750f17/external/nsync/BUILD”,  Add a default conditions there as marked as red line below:
 
-  NSYNC_OPTS_GENERIC = select({
-    # Select the CPU architecture include directory.
-    # This select() has no real effect in the C++11 build, but satisfies a
-    # #include that would otherwise need a #if.
-    ":gcc_linux_x86_64_1": ["-I" + pkg_path_name() + "/platform/x86_64"],
-    ":gcc_linux_x86_64_2": ["-I" + pkg_path_name() + "/platform/x86_64"],
-    ":gcc_linux_aarch64": ["-I" + pkg_path_name() + "/platform/aarch64"],
-    ":gcc_linux_ppc64": ["-I" + pkg_path_name() + "/platform/ppc64"],
-    ":clang_macos_x86_64": ["-I" + pkg_path_name() + "/platform/x86_64"],
-    ":ios_x86_64": ["-I" + pkg_path_name() + "/platform/x86_64"],
-    ":android_x86_32": ["-I" + pkg_path_name() + "/platform/x86_32"],
-    ":android_x86_64": ["-I" + pkg_path_name() + "/platform/x86_64"],
-    ":android_armeabi": ["-I" + pkg_path_name() + "/platform/arm"],
-    ":android_arm": ["-I" + pkg_path_name() + "/platform/arm"],
-    ":android_arm64": ["-I" + pkg_path_name() + "/platform/aarch64"],
-    ":msvc_windows_x86_64": ["-I" + pkg_path_name() + "/platform/x86_64"],
-    "//conditions:default": [],
-  }) + [
+	  NSYNC_OPTS_GENERIC = select({
+	    # Select the CPU architecture include directory.
+	    # This select() has no real effect in the C++11 build, but satisfies a
+	    # #include that would otherwise need a #if.
+	    ":gcc_linux_x86_64_1": ["-I" + pkg_path_name() + "/platform/x86_64"],
+	    ":gcc_linux_x86_64_2": ["-I" + pkg_path_name() + "/platform/x86_64"],
+	    ":gcc_linux_aarch64": ["-I" + pkg_path_name() + "/platform/aarch64"],
+	    ":gcc_linux_ppc64": ["-I" + pkg_path_name() + "/platform/ppc64"],
+	    ":clang_macos_x86_64": ["-I" + pkg_path_name() + "/platform/x86_64"],
+	    ":ios_x86_64": ["-I" + pkg_path_name() + "/platform/x86_64"],
+	    ":android_x86_32": ["-I" + pkg_path_name() + "/platform/x86_32"],
+	    ":android_x86_64": ["-I" + pkg_path_name() + "/platform/x86_64"],
+	    ":android_armeabi": ["-I" + pkg_path_name() + "/platform/arm"],
+	    ":android_arm": ["-I" + pkg_path_name() + "/platform/arm"],
+	    ":android_arm64": ["-I" + pkg_path_name() + "/platform/aarch64"],
+	    ":msvc_windows_x86_64": ["-I" + pkg_path_name() + "/platform/x86_64"],
+	    "//conditions:default": [],
+	  }) + [
 
 ## 3.4 Build Unit tests
-  bazel build -c opt \
-    --incompatible_load_argument_is_label=false \
-    --cxxopt=-fexceptions \
-    --copt="-I/home/cym/project/ComputeLibrary/" \
-    --copt="-I/home/cym/project/ComputeLibrary/include" \
-    --cpu=aarch64 \
-    --crosstool_top=//tools/aarch64_compiler:toolchain \
-    --host_crosstool_top=@bazel_tools//tools/cpp:toolchain \
-    --copt="-DUSE_ACL=1" --copt="-DTEST_ACL=1" –verbose_failures \
-    //tensorflow/python/kernel_tests:<TEST_CASE>
+	  bazel build -c opt \
+	    --incompatible_load_argument_is_label=false \
+	    --cxxopt=-fexceptions \
+	    --copt="-I/home/cym/project/ComputeLibrary/" \
+	    --copt="-I/home/cym/project/ComputeLibrary/include" \
+	    --cpu=aarch64 \
+	    --crosstool_top=//tools/aarch64_compiler:toolchain \
+	    --host_crosstool_top=@bazel_tools//tools/cpp:toolchain \
+	    --copt="-DUSE_ACL=1" --copt="-DTEST_ACL=1" –verbose_failures \
+	    //tensorflow/python/kernel_tests:<TEST_CASE>
 
   TEST_CASE list:
-    acl_conv_ops_test
-    acl_lrn_op_test
-    acl_relu_op_test
-    acl_matmul_op_test
-    acl_softmax_op_test
-    acl_cwise_ops_test
-    acl_pooling_ops_test
-    acl_softplus_op_test
+	    acl_conv_ops_test
+	    acl_lrn_op_test
+	    acl_relu_op_test
+	    acl_matmul_op_test
+	    acl_softmax_op_test
+	    acl_cwise_ops_test
+	    acl_pooling_ops_test
+	    acl_softplus_op_test
 
 # 4. Run tests
 
@@ -202,7 +202,6 @@ This Installation will help you get started to setup TensorFlowOnACL on RK3399 q
   
 	  output message:
 ./acl_conv_ops_test
-
 testInceptionFwd_0 [4, 5, 5, 124] [1, 1, 124, 12] [4, 5, 5, 12] 1
 testInceptionFwd_1 [4, 8, 8, 38] [1, 1, 38, 38] [4, 8, 8, 38] 1
 testInceptionFwd_2 [4, 8, 8, 38] [1, 1, 38, 38] [4, 8, 8, 38] 1
