@@ -6,7 +6,7 @@ TensorFlowOnACL is a project that is maintained by **OPEN** AI LAB, it uses Arm 
 The release version is 0.1.0, is based on [Rockchip RK3399](http://www.rock-chips.com/plus/3399.html) Platform, target OS is Ubuntu 16.04. Can download the source code from [OAID/TensorFlowOnACL](https://github.com/OAID/TensorFlowOnACL)
 
 * The ARM Computer Vision and Machine Learning library is a set of functions optimised for both ARM CPUs and GPUs using SIMD technologies. See also [Arm Compute Library](https://github.com/ARM-software/ComputeLibrary).
-* Caffe is a fast open framework for deep learning. See also [Caffe](https://github.com/BVLC/caffe).
+* TensorFlow is a fast open framework for deep learning. See also [README](README_TF.md).
 
 ### Documents
 * [Installation instructions](acl_openailab/installation.md)
@@ -18,8 +18,7 @@ Performance need be fine turned in the future.
 # Release History
 
 ### Version 0.1.0 - Dec 28, 2017 
-   
-  Initial version accelerated by Arm Compute Library version 17.10 : 
+   Initial version accelerated by Arm Compute Library version 17.10 : 
 
 # Issue Report
 Encounter any issue, please report on [issue report](https://github.com/OAID/TensorFlowOnACL/issues). Issue report should contain the following information :
