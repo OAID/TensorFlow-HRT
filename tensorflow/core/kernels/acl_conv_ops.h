@@ -256,10 +256,13 @@ class AclConv2DOp : public OpKernel,
     void RunACLLayer(OpKernelContext* ctx, const Tensor& in_data, const Tensor& filter,
                      const Tensor* bias, Tensor* out_data, const AclConv2DArgs& args){
 
+    const T* input_data = in_data.flat<T>().data();
+    T* output_data = out_data->flat<T>().data();
+
+    if (this->init_layer_) {
       arm_compute::TensorShape input_shape(args.in_cols, args.in_rows,
                                            args.in_depth, args.batch); //wxhxchxnum
       ACLBaseLayer<GPUConvLayer, CPUConvLayer>::checkreshape(input_shape, is_gpu_);
-      if (!this->init_layer_) return;
       this->init_layer_=false;
     // Initialize ACL.
       if (is_gpu_) {
@@ -276,8 +279,6 @@ class AclConv2DOp : public OpKernel,
       arm_compute::TensorShape biases_shape (args.out_depth);
       arm_compute::TensorShape output_shape(args.out_cols, args.out_rows,
                                             args.out_depth, args.batch);
-      const T* input_data = in_data.flat<T>().data();
-      T* output_data = out_data->flat<T>().data();
       T* weithts_data = const_cast<T* >(filter.flat<T>().data());
       const T* bias_data=nullptr;
       if (!no_bias_) 
@@ -330,7 +331,8 @@ class AclConv2DOp : public OpKernel,
           acl_configure(this->cpu(), this->cpu().input, this->cpu().weights,
                         this->cpu().biases, this->cpu().output, conv_info);
       }
-      ACLBaseLayer<GPUConvLayer,CPUConvLayer>::acl_run((void*)input_data,(void*)output_data, is_gpu_);
+    }
+    ACLBaseLayer<GPUConvLayer,CPUConvLayer>::acl_run((void*)input_data,(void*)output_data, is_gpu_);
   }
   
   std::vector<int32> strides_;

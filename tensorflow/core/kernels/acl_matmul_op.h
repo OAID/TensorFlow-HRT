@@ -86,51 +86,53 @@ class AclMatMulOp : public OpKernel,
   void RunACLLayer(OpKernelContext* ctx,  const Tensor& a,
                      const Tensor& b, Tensor* out) {
 
-    unsigned int M = a.dim_size(0); 
-    unsigned int N = transpose_b_ ? b.dim_size(0) : b.dim_size(1);
-    unsigned int K = a.dim_size(1);
-
-    OP_REQUIRES(
-      ctx, M > 1 && N > 1 && K > 1,
-      errors::InvalidArgument("Acl does not support 1D multiply!"));
-
-    arm_compute::TensorShape input_shape(K, M);
-    arm_compute::TensorShape output_shape(N, M);
-    checkreshape(input_shape,is_gpu_);
-    if (!this->init_layer_) return;
-    this->init_layer_=false;
-    if (is_gpu_) new_gpulayer();
-    else new_cpulayer();
-
     const T* input_data = a.flat<T>().data();
     T* output_data = out->flat<T>().data();
-    const T* weithts_data= b.flat<T>().data();
+    
+    if (this->init_layer_) {
+      unsigned int M = a.dim_size(0); 
+      unsigned int N = transpose_b_ ? b.dim_size(0) : b.dim_size(1);
+      unsigned int K = a.dim_size(1);
 
-    this->force_bypass_acl_path_ = false; 
-    if (is_gpu_) {
-        if (transpose_b_) {
-            new_tensor(this->gpu().weights, arm_compute::TensorShape(K, N), (void*)weithts_data);
-        }else{
-            new_tensor(this->gpu().weights, arm_compute::TensorShape(N, K), (void*)weithts_data);
-        }
-        tensor_mem(this->gpu().weights, (void*)weithts_data);
-        new_tensor(this->gpu().input, input_shape, (void*)input_data);
-        new_tensor(this->gpu().output, output_shape, (void*)output_data);
-        acl_configure(this->gpu(), this->gpu().input, this->gpu().weights,
-                      this->gpu().biases, this->gpu().output, transpose_b_);
-    }else{
-        if (transpose_b_) {
-            new_tensor(this->cpu().weights, arm_compute::TensorShape(K, N), (void*)weithts_data);
-        }else{
-            new_tensor(this->cpu().weights, arm_compute::TensorShape(N, K), (void*)weithts_data);
-        }
-        tensor_mem(this->cpu().weights, (void*)weithts_data);
-        new_tensor(this->cpu().input, input_shape, (void*)input_data);
-        new_tensor(this->cpu().output, output_shape, (void*)output_data);
-        acl_configure(this->cpu(), this->cpu().input, this->cpu().weights,
-                      this->cpu().biases, this->cpu().output, transpose_b_);
+      OP_REQUIRES(
+        ctx, M > 1 && N > 1 && K > 1,
+        errors::InvalidArgument("Acl does not support 1D multiply!"));
+
+      arm_compute::TensorShape input_shape(K, M);
+      arm_compute::TensorShape output_shape(N, M);
+      checkreshape(input_shape,is_gpu_);
+      
+      this->init_layer_=false;
+      if (is_gpu_) new_gpulayer();
+      else new_cpulayer();
+
+      const T* weithts_data= b.flat<T>().data();
+
+      this->force_bypass_acl_path_ = false; 
+      if (is_gpu_) {
+          if (transpose_b_) {
+              new_tensor(this->gpu().weights, arm_compute::TensorShape(K, N), (void*)weithts_data);
+          }else{
+              new_tensor(this->gpu().weights, arm_compute::TensorShape(N, K), (void*)weithts_data);
+          }
+          tensor_mem(this->gpu().weights, (void*)weithts_data);
+          new_tensor(this->gpu().input, input_shape, (void*)input_data);
+          new_tensor(this->gpu().output, output_shape, (void*)output_data);
+          acl_configure(this->gpu(), this->gpu().input, this->gpu().weights,
+                        this->gpu().biases, this->gpu().output, transpose_b_);
+      }else{
+          if (transpose_b_) {
+              new_tensor(this->cpu().weights, arm_compute::TensorShape(K, N), (void*)weithts_data);
+          }else{
+              new_tensor(this->cpu().weights, arm_compute::TensorShape(N, K), (void*)weithts_data);
+          }
+          tensor_mem(this->cpu().weights, (void*)weithts_data);
+          new_tensor(this->cpu().input, input_shape, (void*)input_data);
+          new_tensor(this->cpu().output, output_shape, (void*)output_data);
+          acl_configure(this->cpu(), this->cpu().input, this->cpu().weights,
+                        this->cpu().biases, this->cpu().output, transpose_b_);
+      }
     }
-
     acl_run((void*)input_data, (void*)output_data, is_gpu_);
   }
 

@@ -54,28 +54,30 @@ class AclSoftmaxOp : public OpKernel,
   void RunACLLayer(OpKernelContext* context, const Tensor& softmax_in,
                    Tensor* softmax_out){
 
-    const uint64 batch_size = softmax_in.dim_size(0);
-    const uint64 num_classes = softmax_in.dim_size(1);
-    arm_compute::TensorShape shape(num_classes);
-    checkreshape(shape, is_gpu_);
-    if (!this->init_layer_) return;
-    this->init_layer_= false;
-
-    if (is_gpu_) new_gpulayer();
-    else new_cpulayer();
-
-    this->force_bypass_acl_path_ = false;
     const T* input_data = softmax_in.flat<T>().data();
     T* output_data = softmax_out->flat<T>().data();
+    const uint64 batch_size = softmax_in.dim_size(0);
+    const uint64 num_classes = softmax_in.dim_size(1);
 
-    if (is_gpu_) {
-        new_tensor(this->gpu().input, shape, (void*)input_data);
-        new_tensor(this->gpu().output, shape, (void*)output_data);
-        acl_configure(this->gpu(), this->gpu().input, this->gpu().output);
-    }else{
-        new_tensor(this->cpu().input, shape, (void*)input_data);
-        new_tensor(this->cpu().output, shape, (void*)output_data);
-        acl_configure(this->cpu(), this->cpu().input, this->cpu().output);
+    if (this->init_layer_) {
+      arm_compute::TensorShape shape(num_classes);
+      checkreshape(shape, is_gpu_);
+      this->init_layer_= false;
+
+      if (is_gpu_) new_gpulayer();
+      else new_cpulayer();
+
+      this->force_bypass_acl_path_ = false;
+
+      if (is_gpu_) {
+          new_tensor(this->gpu().input, shape, (void*)input_data);
+          new_tensor(this->gpu().output, shape, (void*)output_data);
+          acl_configure(this->gpu(), this->gpu().input, this->gpu().output);
+      }else{
+          new_tensor(this->cpu().input, shape, (void*)input_data);
+          new_tensor(this->cpu().output, shape, (void*)output_data);
+          acl_configure(this->cpu(), this->cpu().input, this->cpu().output);
+      }
     }
 
     for (unsigned int i = 0; i < batch_size; ++i) {

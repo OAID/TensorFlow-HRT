@@ -185,45 +185,47 @@ class AclPoolingOp : public OpKernel,
    void RunAclLayer(OpKernelContext* context, const AclPoolParameters& params,
                     const Tensor& tensor_in, Tensor* output) {
 
-    arm_compute::TensorShape in_shape((unsigned int)params.tensor_in_cols,
-        (unsigned int)params.tensor_in_rows,
-        (unsigned int)params.depth);
-    arm_compute::TensorShape out_shape((unsigned int)params.out_width,
-          (unsigned int)params.out_height,
-          (unsigned int)params.out_depth);
-    checkreshape(in_shape,is_gpu_);
-
-    if (!this->init_layer_) return;
-    this->init_layer_=false;
-    if (is_gpu_) new_gpulayer();
-    else new_cpulayer();
-
-    this->force_bypass_acl_path_ = false;
-    arm_compute::PoolingLayerInfo *pool_info;
     const T* input_data = tensor_in.flat<T>().data();
     T* output_data = output->flat<T>().data();
-    
-    arm_compute::PoolingType pool_type = is_max_pool_ ? 
-                arm_compute::PoolingType::MAX :
-                arm_compute::PoolingType::AVG;
 
-    pool_info = new arm_compute::PoolingLayerInfo(pool_type,
-                  params.window_cols,
-                  arm_compute::PadStrideInfo(params.col_stride,
-                    params.row_stride,
-                    params.pad_cols,
-                    params.pad_rows,
-                    round_type_));
-    if (is_gpu_) {
-      new_tensor(this->gpu().input, in_shape, (void*)input_data);
-      new_tensor(this->gpu().output, out_shape, (void*)output_data);
-      this->gpu().layer->configure(this->gpu().input,this->gpu().output,*pool_info);
-    }else{
-      new_tensor(this->cpu().input,in_shape,(void*)input_data);
-      new_tensor(this->cpu().output,out_shape,(void*)output_data);
-      this->cpu().layer->configure(this->cpu().input,this->cpu().output,*pool_info);
+    if (this->init_layer_) {
+      arm_compute::TensorShape in_shape((unsigned int)params.tensor_in_cols,
+          (unsigned int)params.tensor_in_rows,
+          (unsigned int)params.depth);
+      arm_compute::TensorShape out_shape((unsigned int)params.out_width,
+            (unsigned int)params.out_height,
+            (unsigned int)params.out_depth);
+      checkreshape(in_shape,is_gpu_);
+
+      this->init_layer_=false;
+      if (is_gpu_) new_gpulayer();
+      else new_cpulayer();
+
+      this->force_bypass_acl_path_ = false;
+      arm_compute::PoolingLayerInfo *pool_info;
+
+      arm_compute::PoolingType pool_type = is_max_pool_ ? 
+                  arm_compute::PoolingType::MAX :
+                  arm_compute::PoolingType::AVG;
+
+      pool_info = new arm_compute::PoolingLayerInfo(pool_type,
+                    params.window_cols,
+                    arm_compute::PadStrideInfo(params.col_stride,
+                      params.row_stride,
+                      params.pad_cols,
+                      params.pad_rows,
+                      round_type_));
+      if (is_gpu_) {
+        new_tensor(this->gpu().input, in_shape, (void*)input_data);
+        new_tensor(this->gpu().output, out_shape, (void*)output_data);
+        this->gpu().layer->configure(this->gpu().input,this->gpu().output,*pool_info);
+      }else{
+        new_tensor(this->cpu().input,in_shape,(void*)input_data);
+        new_tensor(this->cpu().output,out_shape,(void*)output_data);
+        this->cpu().layer->configure(this->cpu().input,this->cpu().output,*pool_info);
+      }
+      delete pool_info;
     }
-    delete pool_info;
 
     for (unsigned int n = 0; n < params.tensor_in_batch; ++n) {
       acl_run((void*)input_data, (void*)output_data, is_gpu_);

@@ -69,33 +69,35 @@ class AclUnaryOp : public OpKernel,
 
 private:
   void RunACLLayer(OpKernelContext* ctx, const Tensor& inp, Tensor* out){
-    const unsigned int count_in  = inp.shape().num_elements();
-    const unsigned int count_out = out->shape().num_elements();
-    arm_compute::TensorShape input_shape(count_in);
-    arm_compute::TensorShape output_shape(count_out);
-    checkreshape(input_shape, is_gpu_);
-    if (!this->init_layer_) return;
-    this->init_layer_=false;
-    if (is_gpu_) new_gpulayer();
-    else new_cpulayer();
-
-    this->force_bypass_acl_path_=false;
-
-    arm_compute::ActivationLayerInfo act_info(act_fun_);
     const T* input_data = inp.flat<T>().data();
     T* output_data = out->flat<T>().data();
 
-    if(act_fun_ == arm_compute::ActivationLayerInfo::ActivationFunction::TANH)
-      act_info = arm_compute::ActivationLayerInfo(act_fun_, 1.0, 1.0);
+    if (this->init_layer_) {
+      const unsigned int count_in  = inp.shape().num_elements();
+      const unsigned int count_out = out->shape().num_elements();
+      arm_compute::TensorShape input_shape(count_in);
+      arm_compute::TensorShape output_shape(count_out);
+      checkreshape(input_shape, is_gpu_);
+      this->init_layer_=false;
+      if (is_gpu_) new_gpulayer();
+      else new_cpulayer();
 
-    if (is_gpu_) {
-        new_tensor(this->gpu().input, input_shape, (void*)input_data);
-        new_tensor(this->gpu().output, output_shape, (void*)output_data);
-        this->gpu().layer-> configure(this->gpu().input, this->gpu().output,act_info);
-    }else{
-        new_tensor(this->cpu().input, input_shape, (void*)(input_data));
-        new_tensor(this->cpu().output,output_shape,(void*)output_data);
-        this->cpu().layer->configure(this->cpu().input, this->cpu().output,act_info);
+      this->force_bypass_acl_path_=false;
+
+      arm_compute::ActivationLayerInfo act_info(act_fun_);
+
+      if(act_fun_ == arm_compute::ActivationLayerInfo::ActivationFunction::TANH)
+        act_info = arm_compute::ActivationLayerInfo(act_fun_, 1.0, 1.0);
+
+      if (is_gpu_) {
+          new_tensor(this->gpu().input, input_shape, (void*)input_data);
+          new_tensor(this->gpu().output, output_shape, (void*)output_data);
+          this->gpu().layer-> configure(this->gpu().input, this->gpu().output,act_info);
+      }else{
+          new_tensor(this->cpu().input, input_shape, (void*)(input_data));
+          new_tensor(this->cpu().output,output_shape,(void*)output_data);
+          this->cpu().layer->configure(this->cpu().input, this->cpu().output,act_info);
+      }
     }
     acl_run((void*)input_data,(void*)output_data, is_gpu_);
   }
