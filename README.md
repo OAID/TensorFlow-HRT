@@ -1,4 +1,4 @@
-# CaffeOnACL
+# TensorFlowOnACL
 [![GitHub license](http://dmlc.github.io/img/apache2.svg)](./LICENSE)
 
 TensorFlowOnACL is a project that is maintained by **OPEN** AI LAB, it uses Arm Compute Library (NEON+GPU) to speed up [TensorFlow](https://www.tensorflow.org).
