@@ -34,6 +34,13 @@ namespace tensorflow {
 typedef Eigen::ThreadPoolDevice CPUDevice;
 typedef Eigen::GpuDevice GPUDevice;
 
+enum ACL_FUN {
+  ACL_LOGISTIC,
+  ACL_TANH,
+  ACL_RELU,
+  ACL_SOFT_RELU,
+};
+
 // Coefficient-wise unary operations:
 //   Device: E.g., CPUDevice, GPUDevice.
 //   Functor: defined in cwise_ops.h. E.g., functor::sqrt.
@@ -46,20 +53,41 @@ class AclUnaryOp : public OpKernel,
     auto in = DataTypeToEnum<T>::v();
     auto out = DataTypeToEnum<T>::v();
     OP_REQUIRES_OK(ctx, ctx->MatchSignature({in}, {out}));
-    if (std::is_same<Functor, functor::sigmoid<T>>::value)
+    if (std::is_same<Functor, functor::sigmoid<T>>::value) {
       act_fun_ = arm_compute::ActivationLayerInfo::ActivationFunction::LOGISTIC;
-    else if (std::is_same<Functor, functor::tanh<T>>::value)
+      acl_fun_ = ACL_LOGISTIC;
+    } else if (std::is_same<Functor, functor::tanh<T>>::value) {
       act_fun_ = arm_compute::ActivationLayerInfo::ActivationFunction::TANH;
-    else if (std::is_same<Functor, functor::Relu<Device, T>>::value)
+      acl_fun_ = ACL_TANH;
+    } else if (std::is_same<Functor, functor::Relu<Device, T>>::value) {
       act_fun_ = arm_compute::ActivationLayerInfo::ActivationFunction::RELU;
-    else if (std::is_same<Functor, functor::Softplus<Device, T>>::value)
+      acl_fun_ = ACL_RELU;
+    } else if (std::is_same<Functor, functor::Softplus<Device, T>>::value) {
       act_fun_ = arm_compute::ActivationLayerInfo::ActivationFunction::SOFT_RELU;
-    else
+      acl_fun_ = ACL_SOFT_RELU;
+    } else
       ctx->CtxFailure(errors::Unimplemented("Acl only sipport sigmoid, tanh," 
             "relu, and softplus"));
   }
 
   void Compute(OpKernelContext* ctx) override {
+#if defined(USE_PROFILING)
+      logtime_util log_time;
+      switch(acl_fun_){
+          case ACL_RELU:
+              log_time.setlogtime_info(ACL_RELU_INFO);
+              break;
+          case ACL_LOGISTIC:
+              log_time.setlogtime_info(ACL_SIGMOID_INFO);
+              break;
+          case ACL_TANH:
+              log_time.setlogtime_info(ACL_TANH_INFO);
+              break;
+          case ACL_SOFT_RELU:
+              log_time.setlogtime_info(ACL_SOFTRELU_INFO);
+              break;
+      }
+#endif //USE_PROFILING
     const Tensor& inp = ctx->input(0);
     Tensor* out = nullptr;
     OP_REQUIRES_OK(ctx, ctx->forward_input_or_allocate_output(
@@ -71,18 +99,16 @@ private:
   void RunACLLayer(OpKernelContext* ctx, const Tensor& inp, Tensor* out){
     const T* input_data = inp.flat<T>().data();
     T* output_data = out->flat<T>().data();
-
+    const unsigned int count_in  = inp.shape().num_elements();
+    arm_compute::TensorShape input_shape(count_in);
+    checkreshape(input_shape, is_gpu_);
+ 
     if (this->init_layer_) {
-      const unsigned int count_in  = inp.shape().num_elements();
       const unsigned int count_out = out->shape().num_elements();
-      arm_compute::TensorShape input_shape(count_in);
       arm_compute::TensorShape output_shape(count_out);
-      checkreshape(input_shape, is_gpu_);
       this->init_layer_=false;
       if (is_gpu_) new_gpulayer();
       else new_cpulayer();
-
-      this->force_bypass_acl_path_=false;
 
       arm_compute::ActivationLayerInfo act_info(act_fun_);
 
@@ -92,10 +118,16 @@ private:
       if (is_gpu_) {
           new_tensor(this->gpu().input, input_shape, (void*)input_data);
           new_tensor(this->gpu().output, output_shape, (void*)output_data);
+#if defined(USE_PROFILING)
+          logtime_util log_time(ACL_CONFIG_INFO);
+#endif //USE_PROFILING
           this->gpu().layer-> configure(this->gpu().input, this->gpu().output,act_info);
       }else{
           new_tensor(this->cpu().input, input_shape, (void*)(input_data));
           new_tensor(this->cpu().output,output_shape,(void*)output_data);
+#if defined(USE_PROFILING)
+          logtime_util log_time(ACL_CONFIG_INFO);
+#endif //USE_PROFILING
           this->cpu().layer->configure(this->cpu().input, this->cpu().output,act_info);
       }
     }
@@ -104,6 +136,7 @@ private:
 
 private:
   arm_compute::ActivationLayerInfo::ActivationFunction act_fun_;
+  ACL_FUN  acl_fun_;
 };
 
 } // end namespace tensorflow

@@ -29,7 +29,7 @@ limitations under the License.
 #include "tensorflow/core/util/tensor_format.h"
 #include "tensorflow/core/util/work_sharder.h"
 
-#if defined(USE_ACL) && defined(TEST_ACL)
+#if defined(USE_ACL)
 #include "tensorflow/core/kernels/acl_pooling_ops.h"
 #endif
 
@@ -88,9 +88,11 @@ class MaxPoolingOp : public OpKernel {
     if (status.ok()) {
       OP_REQUIRES(context, FormatFromString(data_format, &data_format_),
                   errors::InvalidArgument("Invalid data format"));
+#if !defined(TEST_ACL)
       OP_REQUIRES(
           context, data_format_ == FORMAT_NHWC,
           errors::InvalidArgument("Default MaxPoolingOp only supports NHWC."));
+#endif
     } else {
       data_format_ = FORMAT_NHWC;
     }
@@ -114,6 +116,20 @@ class MaxPoolingOp : public OpKernel {
   }
 
   void Compute(OpKernelContext* context) override {
+#if defined(USE_ACL)
+#if defined(USE_PROFILING)
+    logtime_util log_time(ACL_POOLING_INFO);
+#endif
+#if defined(TEST_ACL)
+    if (acl_max_pooling_op_ 
+        && !acl_max_pooling_op_->Bypass_acl(context)) {
+
+       acl_max_pooling_op_->Compute(context);
+       return;
+    }
+#endif
+#endif
+
     const Tensor& tensor_in = context->input(0);
     PoolParameters params{context,  ksize_,      stride_,
                           padding_, FORMAT_NHWC, tensor_in.shape()};
@@ -121,17 +137,6 @@ class MaxPoolingOp : public OpKernel {
       return;
     }
 
-#if defined(TEST_ACL) && defined(USE_ACL)
-    if (acl_max_pooling_op_ 
-        && params.row_stride == params.col_stride
-        && params.window_rows == params.window_cols
-        && (params.window_rows == 2 || params.window_rows == 3)
-        && acl_max_pooling_op_->AclCheckParams(context)) {
-
-       acl_max_pooling_op_->Compute(context);
-       return;
-    }
-#endif
     Tensor* output = nullptr;
     OP_REQUIRES_OK(context, context->allocate_output(
                                 0, params.forward_output_shape(), &output));

@@ -68,6 +68,8 @@ class AclConv2DOp : public OpKernel,
 
  public:
   explicit AclConv2DOp(OpKernelConstruction* context) :  OpKernel(context) {
+    this->force_bypass_acl_path_ = bypass_acl_class_layer & FLAGS_ENABLE_ACL_CONV;
+
     OP_REQUIRES_OK(context, context->GetAttr("strides", &strides_));
     string data_format_str, filter_format_str;
     OP_REQUIRES_OK(context, context->GetAttr("data_format", &data_format_str));
@@ -86,11 +88,7 @@ class AclConv2DOp : public OpKernel,
     OP_REQUIRES(context, FilterFormatFromString(filter_format_str, &filter_format_),
                 errors::InvalidArgument("Invalid filter format string: ",
                                     filter_format_str));
-#if !defined(TEST_ACL)
-    OP_REQUIRES_OK(context, context->GetAttr("no_bias", &no_bias_));
-#else
     no_bias_ = true;
-#endif
     OP_REQUIRES(context, strides_.size() == 4,
                 errors::InvalidArgument("Sliding window strides field must "
                                         "specify 4 dimensions"));
@@ -101,6 +99,9 @@ class AclConv2DOp : public OpKernel,
         errors::InvalidArgument("Current implementation does not yet support "
                                 "strides in the batch and depth dimensions."));
     OP_REQUIRES_OK(context, context->GetAttr("padding", &padding_));
+    round_type_ = static_cast<arm_compute::DimensionRoundingType>(
+      static_cast<int>(arm_compute::DimensionRoundingType::CEIL) + 1);
+
   }
 
   void Compute(OpKernelContext* context) override {
@@ -203,13 +204,8 @@ class AclConv2DOp : public OpKernel,
       return;
     }
 
-    OP_REQUIRES(
-        context,
-        ((args.filter_cols ==  1 && args.filter_rows == 1 &&
-          args.pad_cols == 0 && args.pad_rows == 0 ) ||
-         (args.filter_cols ==  3 && args.filter_rows == 3 &&
-          args.pad_cols <= 1 && args.pad_rows <= 1 )),
-        errors::InvalidArgument("ACL only support 1x1(pad 0) and 3x3(pad <= 1)"));
+    OP_REQUIRES(context, AclCheckParamsInternal(args),
+                errors::InvalidArgument("Can't set ACL round type!"));
 #if defined(TEST_ACL)
     if (data_format_ == FORMAT_NHWC || filter_format_ == FORMAT_HWIO) {
       Tensor in_tmp, *in = const_cast<Tensor* >(&input);
@@ -259,10 +255,17 @@ class AclConv2DOp : public OpKernel,
     const T* input_data = in_data.flat<T>().data();
     T* output_data = out_data->flat<T>().data();
 
+    arm_compute::TensorShape input_shape(args.in_cols, args.in_rows,
+                                          args.in_depth, args.batch); //wxhxchxnum
+    arm_compute::TensorShape output_shape(args.out_cols, args.out_rows,
+                                          args.out_depth, args.batch);
+    arm_compute::TensorShape weights_shape(args.filter_cols, args.filter_rows,
+                                           args.in_depth, args.out_depth);
+    ACLBaseLayer<GPUConvLayer, CPUConvLayer>::checkreshape(input_shape, is_gpu_);
+    ACLBaseLayer<GPUConvLayer, CPUConvLayer>::checkreshape(output_shape, is_gpu_);
+    ACLBaseLayer<GPUConvLayer, CPUConvLayer>::checkreshape(weights_shape, is_gpu_);
+
     if (this->init_layer_) {
-      arm_compute::TensorShape input_shape(args.in_cols, args.in_rows,
-                                           args.in_depth, args.batch); //wxhxchxnum
-      ACLBaseLayer<GPUConvLayer, CPUConvLayer>::checkreshape(input_shape, is_gpu_);
       this->init_layer_=false;
     // Initialize ACL.
       if (is_gpu_) {
@@ -270,15 +273,10 @@ class AclConv2DOp : public OpKernel,
       }else{
           ACLBaseLayer<GPUConvLayer, CPUConvLayer>::new_cpulayer();
       }
-      this->force_bypass_acl_path_=false;
 
       arm_compute::PadStrideInfo conv_info(args.stride_cols, args.stride_rows,
-                                           args.pad_cols, args.pad_rows/*, round_type*/);
-      arm_compute::TensorShape weights_shape(args.filter_cols, args.filter_rows,
-                                             args.in_depth, args.out_depth);
+                                           args.pad_cols, args.pad_rows, round_type_);
       arm_compute::TensorShape biases_shape (args.out_depth);
-      arm_compute::TensorShape output_shape(args.out_cols, args.out_rows,
-                                            args.out_depth, args.batch);
       T* weithts_data = const_cast<T* >(filter.flat<T>().data());
       const T* bias_data=nullptr;
       if (!no_bias_) 
@@ -304,6 +302,9 @@ class AclConv2DOp : public OpKernel,
           //[width, height, OFM]
           ACLBaseLayer<GPUConvLayer,CPUConvLayer>::new_tensor(
             this->gpu().output, output_shape, (void*)output_data);
+#if defined(USE_PROFILING)
+    logtime_util log_time(ACL_CONFIG_INFO);
+#endif //USE_PROFILING
           acl_configure(this->gpu(), this->gpu().input, this->gpu().weights,
                         this->gpu().biases, this->gpu().output, conv_info);
       }else{
@@ -328,17 +329,73 @@ class AclConv2DOp : public OpKernel,
           ACLBaseLayer<GPUConvLayer,CPUConvLayer>::new_tensor(
             this->cpu().output,
             output_shape, (void*)output_data);
+#if defined(USE_PROFILING)
+    logtime_util log_time(ACL_CONFIG_INFO);
+#endif //USE_PROFILING
           acl_configure(this->cpu(), this->cpu().input, this->cpu().weights,
                         this->cpu().biases, this->cpu().output, conv_info);
       }
     }
     ACLBaseLayer<GPUConvLayer,CPUConvLayer>::acl_run((void*)input_data,(void*)output_data, is_gpu_);
   }
-  
+ 
+  bool AclCheckParamsInternal(const AclConv2DArgs& args) {
+#if 0
+    LOG(INFO) << this << " Conv2D: in_depth = " << args.in_depth
+            << ", input_cols = " << args.in_cols
+            << ", filter_cols = " << args.filter_cols
+            << ", input_rows = " << args.in_rows
+            << ", filter_rows = " << args.filter_rows
+            << ", stride_rows = " << args.stride_rows
+            << ", stride_cols = " << args.stride_cols
+            << ", out_depth = " << args.out_depth
+            << ", pad_rows = " << args.pad_rows
+            << ", pad_cols = " << args.pad_cols
+            << ", batch = " << args.batch
+            << ", round_type: " << (int)round_type_;
+#endif
+    if (round_type_ == arm_compute::DimensionRoundingType::CEIL
+        || round_type_ == arm_compute::DimensionRoundingType::FLOOR)
+    return true;
+
+    int conv_w = -1, conv_h= -1;
+    std::tie(conv_w, conv_h) = arm_compute::scaled_dimensions(
+      args.in_cols, args.in_rows,
+      args.filter_cols, args.filter_rows,
+      arm_compute::PadStrideInfo(
+        args.stride_cols, args.stride_rows,
+        args.pad_cols, args.pad_rows,
+        arm_compute::DimensionRoundingType::CEIL));
+    if (conv_w == args.out_cols && conv_h == args.out_rows) {
+      round_type_ = arm_compute::DimensionRoundingType::CEIL;
+      return true;
+    }
+
+    std::tie(conv_w, conv_h) = arm_compute::scaled_dimensions(
+      args.in_cols, args.in_rows,
+      args.filter_cols, args.filter_rows,
+      arm_compute::PadStrideInfo(
+        args.stride_cols, args.stride_rows,
+        args.pad_cols, args.pad_rows,
+      arm_compute::DimensionRoundingType::FLOOR));
+
+    if (conv_w == args.out_cols && conv_h == args.out_rows) {
+      round_type_ = arm_compute::DimensionRoundingType::FLOOR;
+      return true;
+    }
+
+    LOG(ERROR) << "Acl(" << conv_w << "," << conv_h << ")"
+      << " != TF(" << args.out_cols << "," << args.out_rows << ")";
+
+    return false;
+  }
+
+ 
   std::vector<int32> strides_;
   bool no_bias_;
   Padding padding_;
   TensorFormat data_format_;
+  arm_compute::DimensionRoundingType round_type_;
   FilterTensorFormat filter_format_;
   TF_DISALLOW_COPY_AND_ASSIGN(AclConv2DOp);
 };

@@ -49,7 +49,7 @@ This Installation will help you get started to setup TensorFlow-HRT on RK3399 qu
 
 ## 3.1 Build ACL :
 	cd ~/ComputeLibrary
-	git checkout 6bc7b9046ae6ed4e4b574675e0c597b5d39a7423
+	git checkout v17.12
 	scons Werror=1 -j4 debug=0 asserts=1 neon=1 opencl=1 embed_kernels=1 os=linux arch=arm64-v8a
 	scp build/*.so firefly@192.168.3.211:/home/firefly/
 
@@ -119,11 +119,11 @@ This Installation will help you get started to setup TensorFlow-HRT on RK3399 qu
     bazel build -c opt --cxxopt=-fexceptions --copt="-I/home/[user name]/ComputeLibrary/" --copt="-I/home/[user name]/ComputeLibrary/include" \
       --cpu=aarch64 --crosstool_top=//tools/aarch64_compiler:toolchain --host_crosstool_top=@bazel_tools//tools/cpp:toolchain --host_copt="-DUSE_ACL=1" \
       --copt="-DUSE_ACL=1" --copt="-DTEST_ACL=1" --copt="-DUSE_PROFILING=1" --incompatible_load_argument_is_label=false --verbose_failures \
-      //ensorFlow-HRT/tools/pip_package:build_pip_package
+      //tensorflow/tools/pip_package:build_pip_package
     
-    bazel-bin/TensorFlow-HRT/tools/pip_package/build_pip_package /tmp/install/
+    bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/install/
     
-    mv /tmp/install/TensorFlow-1.4.0-cp27-cp27mu-linux_x86_64.whl TensorFlow-1.4.0-cp27-cp27mu-linux_aarch64.whl
+    mv /tmp/install/tensorflow-1.4.0-cp27-cp27mu-linux_x86_64.whl tensorflow-1.4.0-cp27-cp27mu-linux_aarch64.whl
 	 
   If there is a following build error
   
@@ -163,45 +163,48 @@ This Installation will help you get started to setup TensorFlow-HRT on RK3399 qu
       bazel build -c opt --incompatible_load_argument_is_label=false --cxxopt=-fexceptions --copt="-I/home/[user name]/ComputeLibrary/" \
         --copt="-I/home/[user name]/ComputeLibrary/include" --cpu=aarch64 --crosstool_top=//tools/aarch64_compiler:toolchain \
         --host_crosstool_top=@bazel_tools//tools/cpp:toolchain --copt="-DUSE_ACL=1" --copt="-DTEST_ACL=1" --copt="-DUSE_PROFILING=1" --verbose_failures \
-        //TensorFlow-HRT/examples/label_image/...
+        //tensorflow/examples/label_image/...
 
 # 4. Run tests
 #### 4.1 copy and install build files
-      ssh firefly@192.168.3.211 "mkdir -p test/TensorFlow-HRT/examples/label_image/data/" 
+      ssh firefly@192.168.3.211 "mkdir -p test/tensorflow/examples/label_image/data/" 
       
       cd ~/TensorFlow-HRT 
       
       scp acl_openailab/test/* firefly@192.168.3.211:/home/firefly/test/
       
-      scp TensorFlow-1.4.0-cp27-cp27mu-linux_aarch64.whl firefly@192.168.3.211:/home/firefly/test/
+      scp tensorflow-1.4.0-cp27-cp27mu-linux_aarch64.whl firefly@192.168.3.211:/home/firefly/test/
       
-      scp TensorFlow/python/kernel_tests/acl*.py firefly@192.168.3.211:/home/firefly/test/
+      scp tensorflow/python/kernel_tests/acl*.py firefly@192.168.3.211:/home/firefly/test/
       
-      scp bazel-bin/TensorFlow-HRT/examples/label_image/label_image firefly@192.168.3.211:/home/firefly/test/
+      scp bazel-bin/tensorflow/examples/label_image/label_image firefly@192.168.3.211:/home/firefly/test/
       
-      scp TensorFlow-HRT/examples/label_image/data/grace_hopper.jpg firefly@192.168.3.211:/home/firefly/test/TensorFlow-HRT/examples/label_image/data/
+      scp tensorflow/examples/label_image/data/grace_hopper.jpg firefly@192.168.3.211:/home/firefly/test/tensorflow/examples/label_image/data/
       
       ssh firefly@192.168.3.211
       
       cd test
       
-      sudo pip install TensorFlow-1.4.0-cp27-cp27mu-linux_aarch64.whl
+      sudo pip install tensorflow-1.4.0-cp27-cp27mu-linux_aarch64.whl
+      
+      7z x models.7z.001
+      
 #### 4.2 Run label_image Example
       ssh firefly@192.168.3.211
       
       cd test
 	  
-	  tar -C TensorFlow-HRT/examples/label_image/data -xvzf inception_v3_2016_08_28_frozen.pb.tar.gz
+	  tar -C tensorflow/examples/label_image/data -xvzf inception_v3_2016_08_28_frozen.pb.tar.gz
 	  
-	  LD_LIBRARY_PATH=/usr/local/lib/python2.7/dist-packages/TensorFlow-HRT/ ./label_image
+	  LD_LIBRARY_PATH=/usr/local/lib/python2.7/dist-packages/tensorflow/ ./label_image
 
   output message
 
-      2018-02-09 05:58:38.309086: I TensorFlow/examples/label_image/main.cc:250] military uniform (653): 0.834305
-      2018-02-09 05:58:38.309265: I TensorFlow/examples/label_image/main.cc:250] mortarboard (668): 0.0218695
-      2018-02-09 05:58:38.309299: I TensorFlow/examples/label_image/main.cc:250] academic gown (401): 0.0103581
-      2018-02-09 05:58:38.309329: I TensorFlow/examples/label_image/main.cc:250] pickelhaube (716): 0.00800819
-      2018-02-09 05:58:38.309359: I TensorFlow/examples/label_image/main.cc:250] bulletproof vest (466): 0.00535092
+      2018-02-09 05:58:38.309086: I tensorflow/examples/label_image/main.cc:250] military uniform (653): 0.834305
+      2018-02-09 05:58:38.309265: I tensorflow/examples/label_image/main.cc:250] mortarboard (668): 0.0218695
+      2018-02-09 05:58:38.309299: I tensorflow/examples/label_image/main.cc:250] academic gown (401): 0.0103581
+      2018-02-09 05:58:38.309329: I tensorflow/examples/label_image/main.cc:250] pickelhaube (716): 0.00800819
+      2018-02-09 05:58:38.309359: I tensorflow/examples/label_image/main.cc:250] bulletproof vest (466): 0.00535092
     
 #### 4.3 Run Unit test
       ssh firefly@192.168.3.211

@@ -42,7 +42,7 @@ REGISTER_ACL_UNARY_OP2(GPU, "AclRelu", functor::Relu, float);
 REGISTER_ACL_UNARY_OP2(CPU, "AclSoftplus", functor::Softplus, float);
 REGISTER_ACL_UNARY_OP2(GPU, "AclSoftplus", functor::Softplus, float);
 
-#if defined(TEST_ACL) && 0
+#if defined(TEST_ACL)
 REGISTER_ACL_UNARY_OP1(CPU, "Sigmoid", functor::sigmoid, float);
 REGISTER_ACL_UNARY_OP1(GPU, "Sigmoid", functor::sigmoid, float);
 REGISTER_ACL_UNARY_OP1(CPU, "Tanh", functor::tanh, float);

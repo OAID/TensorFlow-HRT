@@ -30,6 +30,10 @@ limitations under the License.
 #include "tensorflow/core/platform/stream_executor.h"
 #endif  // GOOGLE_CUDA
 
+#if defined(USE_ACL)
+#include "tensorflow/core/kernels/acl_matmul_op.h"
+#endif
+
 namespace tensorflow {
 
 typedef Eigen::ThreadPoolDevice CPUDevice;
@@ -451,9 +455,27 @@ class MatMulOp : public OpKernel {
     LaunchMatMul<Device, T, USE_CUBLAS>::GetBlasGemmAlgorithm(
         ctx, &algorithms_, &algorithms_set_already_);
     use_autotune_ = MatmulAutotuneEnable();
+#if defined(TEST_ACL) && defined(TEST_ACL)
+    acl_matmul_op_ = nullptr;
+    if (std::is_same<T, float>::value)
+      acl_matmul_op_ =  new AclMatMulOp<Device, T>(ctx);
+#endif
+
   }
 
   void Compute(OpKernelContext* ctx) override {
+#if defined(USE_ACL)
+#if defined(USE_PROFILING)
+    logtime_util log_time(ACL_MATMUL_INFO);
+#endif //USE_PROFILING
+#if defined(TEST_ACL)
+    if (acl_matmul_op_ 
+        && !acl_matmul_op_->Bypass_acl(ctx)) {
+      acl_matmul_op_->Compute(ctx);
+      return;
+    }
+#endif
+#endif
     const Tensor& a = ctx->input(0);
     const Tensor& b = ctx->input(1);
 
@@ -503,6 +525,9 @@ class MatMulOp : public OpKernel {
   bool use_autotune_;
   bool transpose_a_;
   bool transpose_b_;
+#if defined(TEST_ACL) && defined(TEST_ACL)
+  AclMatMulOp<Device, T>* acl_matmul_op_;
+#endif
 };
 
 namespace functor {

@@ -37,7 +37,8 @@ class AclLRNOp : public OpKernel,
  public:
   explicit AclLRNOp(OpKernelConstruction* context) : OpKernel(context),
     type_(arm_compute::NormType::IN_MAP_1D) {
- 
+    this->force_bypass_acl_path_ = bypass_acl_class_layer & FLAGS_ENABLE_ACL_LRN;
+
     int64 depth_radius64;
     OP_REQUIRES_OK(context, context->GetAttr("depth_radius", &depth_radius64));
     OP_REQUIRES(context, FastBoundsCheck(depth_radius64,
@@ -88,30 +89,35 @@ class AclLRNOp : public OpKernel,
                    Tensor* out_data, const int* dim) {
     const T* input_data  = in_data.flat<T>().data();
     T* output_data = out_data->flat<T>().data();;
-    
+    arm_compute::TensorShape shape(dim[3], dim[2], dim[1]);
+    checkreshape(shape, is_gpu_);
+
     if (this->init_layer_) {
-      arm_compute::TensorShape shape(dim[3], dim[2], dim[1]);
-      checkreshape(shape,is_gpu_);
-      
       if (is_gpu_) new_gpulayer();
       else new_cpulayer();
 
-      this->force_bypass_acl_path_ = false;
       arm_compute::NormalizationLayerInfo* norm_info;
 
       const float nsize = depth_radius_ + depth_radius_ + 1;
-      const float scale = (bias_ == 1) ? alpha_ * nsize : alpha_;
+      const bool is_scaled = (bias_ == 1); 
+      const float scale =  is_scaled ? alpha_ * nsize : alpha_;
 
       norm_info = new arm_compute::NormalizationLayerInfo(type_, nsize,
-                                                          scale, beta_, bias_);
+                                                          scale, beta_, bias_, is_scaled);
 
       if (is_gpu_) {
         new_tensor(this->gpu().input, shape, (void*)input_data);
         new_tensor(this->gpu().output, shape, (void*)output_data);
+#if defined(USE_PROFILING)
+        logtime_util log_time(ACL_CONFIG_INFO);
+#endif //USE_PROFILING
         acl_configure(this->gpu(), this->gpu().input, this->gpu().output, *norm_info);
       }else{
         new_tensor<CPUTensor>(this->cpu().input, shape, (void*)input_data);
         new_tensor<CPUTensor>(this->cpu().output, shape, (void*)output_data);
+#if defined(USE_PROFILING)
+        logtime_util log_time(ACL_CONFIG_INFO);
+#endif //USE_PROFILING
         acl_configure(this->cpu(), this->cpu().input, this->cpu().output, *norm_info);
       }
       delete norm_info;

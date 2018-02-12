@@ -37,9 +37,13 @@ class AclMatMulOp : public OpKernel,
   public ACLBaseLayer<arm_compute::CLFullyConnectedLayer,arm_compute::NEFullyConnectedLayer> {
  public:
   explicit AclMatMulOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
+    this->force_bypass_acl_path_ = bypass_acl_class_layer & FLAGS_ENABLE_ACL_MATMUL;
+    
     OP_REQUIRES_OK(ctx, ctx->GetAttr("transpose_a", &transpose_a_));
+#if !defined(TEST_ACL)
     OP_REQUIRES(ctx, transpose_a_ == 0,
                    errors::Unimplemented("Acl only does not support A transpose!"));
+#endif
     OP_REQUIRES_OK(ctx, ctx->GetAttr("transpose_b", &transpose_b_));
 
   }
@@ -82,6 +86,20 @@ class AclMatMulOp : public OpKernel,
     RunACLLayer(ctx, a, b, out);
   }
 
+  bool Bypass_acl(void* ctx) {
+    if (force_bypass_acl_path_ || transpose_a_) return true;
+
+    OpKernelContext* context = reinterpret_cast<OpKernelContext*>(ctx);
+    const Tensor& a = context->input(0);
+    const Tensor& b = context->input(1);
+
+    unsigned int M = a.dim_size(0); 
+    unsigned int N = transpose_b_ ? b.dim_size(0) : b.dim_size(1);
+    unsigned int K = a.dim_size(1);
+
+    return !(M > 1 && N > 1 && K > 1);
+  }
+
  private:
   void RunACLLayer(OpKernelContext* ctx,  const Tensor& a,
                      const Tensor& b, Tensor* out) {
@@ -89,19 +107,22 @@ class AclMatMulOp : public OpKernel,
     const T* input_data = a.flat<T>().data();
     T* output_data = out->flat<T>().data();
     
+    unsigned int M = a.dim_size(0); 
+    unsigned int N = transpose_b_ ? b.dim_size(0) : b.dim_size(1);
+    unsigned int K = a.dim_size(1);
+
+    OP_REQUIRES(
+      ctx, M > 1 && N > 1 && K > 1,
+      errors::InvalidArgument("Acl does not support 1D multiply!"));
+
+    arm_compute::TensorShape input_shape(K, M);
+    arm_compute::TensorShape output_shape(N, M);
+    arm_compute::TensorShape weight_shape(b.dim_size(1), b.dim_size(0));
+    checkreshape(input_shape,is_gpu_);
+    checkreshape(output_shape, is_gpu_);
+    checkreshape(weight_shape, is_gpu_);
+
     if (this->init_layer_) {
-      unsigned int M = a.dim_size(0); 
-      unsigned int N = transpose_b_ ? b.dim_size(0) : b.dim_size(1);
-      unsigned int K = a.dim_size(1);
-
-      OP_REQUIRES(
-        ctx, M > 1 && N > 1 && K > 1,
-        errors::InvalidArgument("Acl does not support 1D multiply!"));
-
-      arm_compute::TensorShape input_shape(K, M);
-      arm_compute::TensorShape output_shape(N, M);
-      checkreshape(input_shape,is_gpu_);
-      
       this->init_layer_=false;
       if (is_gpu_) new_gpulayer();
       else new_cpulayer();
@@ -110,25 +131,23 @@ class AclMatMulOp : public OpKernel,
 
       this->force_bypass_acl_path_ = false; 
       if (is_gpu_) {
-          if (transpose_b_) {
-              new_tensor(this->gpu().weights, arm_compute::TensorShape(K, N), (void*)weithts_data);
-          }else{
-              new_tensor(this->gpu().weights, arm_compute::TensorShape(N, K), (void*)weithts_data);
-          }
+          new_tensor(this->gpu().weights, weight_shape, (void*)weithts_data);
           tensor_mem(this->gpu().weights, (void*)weithts_data);
           new_tensor(this->gpu().input, input_shape, (void*)input_data);
           new_tensor(this->gpu().output, output_shape, (void*)output_data);
+#if defined(USE_PROFILING)
+          logtime_util log_time(ACL_CONFIG_INFO);
+#endif //USE_PROFILING
           acl_configure(this->gpu(), this->gpu().input, this->gpu().weights,
                         this->gpu().biases, this->gpu().output, transpose_b_);
       }else{
-          if (transpose_b_) {
-              new_tensor(this->cpu().weights, arm_compute::TensorShape(K, N), (void*)weithts_data);
-          }else{
-              new_tensor(this->cpu().weights, arm_compute::TensorShape(N, K), (void*)weithts_data);
-          }
+          new_tensor(this->cpu().weights, weight_shape, (void*)weithts_data);
           tensor_mem(this->cpu().weights, (void*)weithts_data);
           new_tensor(this->cpu().input, input_shape, (void*)input_data);
           new_tensor(this->cpu().output, output_shape, (void*)output_data);
+#if defined(USE_PROFILING)
+          logtime_util log_time(ACL_CONFIG_INFO);
+#endif //USE_PROFILING
           acl_configure(this->cpu(), this->cpu().input, this->cpu().weights,
                         this->cpu().biases, this->cpu().output, transpose_b_);
       }

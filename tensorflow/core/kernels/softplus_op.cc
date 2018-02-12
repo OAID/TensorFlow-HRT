@@ -80,7 +80,6 @@ void SoftplusGradOp<Device, T>::OperateNoTemplate(OpKernelContext* context,
   functor(context->eigen_device<Device>(), g.flat<T>(), a.flat<T>(),
           output->flat<T>());
 }
-#if !defined(USE_ACL) || !defined(TEST_ACL)
 #define REGISTER_KERNELS(type)                                           \
   REGISTER_KERNEL_BUILDER(                                               \
       Name("Softplus").Device(DEVICE_CPU).TypeConstraint<type>("T"),     \
@@ -89,9 +88,15 @@ void SoftplusGradOp<Device, T>::OperateNoTemplate(OpKernelContext* context,
       Name("SoftplusGrad").Device(DEVICE_CPU).TypeConstraint<type>("T"), \
       SoftplusGradOp<CPUDevice, type>);
 
+#if defined(USE_ACL) && defined(TEST_ACL)
+TF_CALL_REAL_NUMBER_TYPES_NO_FLOAT(REGISTER_KERNELS)
+REGISTER_KERNEL_BUILDER(
+      Name("SoftplusGrad").Device(DEVICE_CPU).TypeConstraint<float>("T"),
+      SoftplusGradOp<CPUDevice, float>);
+#else
 TF_CALL_REAL_NUMBER_TYPES(REGISTER_KERNELS);
-#undef REGISTER_KERNELS
 #endif
+#undef REGISTER_KERNELS
 
 #if GOOGLE_CUDA
 // Forward declarations of the functor specializations for GPU.

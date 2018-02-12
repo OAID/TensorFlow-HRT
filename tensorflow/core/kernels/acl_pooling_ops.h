@@ -73,6 +73,9 @@ class AclPoolingOp : public OpKernel,
   public ACLBaseLayer<arm_compute::CLPoolingLayer,arm_compute::NEPoolingLayer>  {
  public:
   explicit AclPoolingOp(OpKernelConstruction* context, bool pool_type) : OpKernel(context), is_max_pool_(pool_type) {
+
+    this->force_bypass_acl_path_ = bypass_acl_class_layer & FLAGS_ENABLE_ACL_POOLING;
+
     string data_format;
     auto status = context->GetAttr("data_format", &data_format);
     if (status.ok()) {
@@ -105,8 +108,8 @@ class AclPoolingOp : public OpKernel,
 
   void Compute(OpKernelContext* context) override {
     const Tensor& tensor_in = context->input(0);
-    AclPoolParameters params{context,  ksize_,      stride_,
-                          padding_, data_format_, tensor_in.shape()};
+    AclPoolParameters params(context,  ksize_,      stride_,
+                          padding_, data_format_, tensor_in.shape());
     if (!context->status().ok()) return;
 
     OP_REQUIRES(context, AclCheckParamsInternal(params),
@@ -142,19 +145,32 @@ class AclPoolingOp : public OpKernel,
   
   inline bool IsMaxpool() const { return  is_max_pool_; }
 
-  bool AclCheckParams(OpKernelContext* context) {
+  bool Bypass_acl(void* ctx) {
+    if (force_bypass_acl_path_) return true;
+
+    OpKernelContext* context = static_cast<OpKernelContext*>(ctx);
     const Tensor& tensor_in = context->input(0);
-    AclPoolParameters params{context,  ksize_,      stride_,
-                          padding_, data_format_, tensor_in.shape()};
-    return AclCheckParamsInternal(params);
+    AclPoolParameters params(context,  ksize_,      stride_,
+                          padding_, data_format_, tensor_in.shape());
+
+    if (data_format_ == FORMAT_NCHW_VECT_C
+        || params.depth_stride != params.depth_window
+        || params.depth % params.depth_window != 0
+        || !(params.row_stride == params.col_stride
+              && params.window_rows == params.window_cols
+              && (params.window_rows == 2 || params.window_rows == 3))
+        || (!is_max_pool_ && params.window_rows == 3 && params.row_stride == 1 && padding_ == SAME))
+      return true;
+
+    return !AclCheckParamsInternal(params);
   }
 
  private:
   bool AclCheckParamsInternal(const AclPoolParameters& params) {
 
-    if (round_type_ == arm_compute::DimensionRoundingType::CEIL
+    /*if (round_type_ == arm_compute::DimensionRoundingType::CEIL
         || round_type_ == arm_compute::DimensionRoundingType::FLOOR)
-    return true;
+    return true;*/
 
     int pooled_w = -1, pooled_h= -1;
     std::tie(pooled_w, pooled_h) = arm_compute::scaled_dimensions(
@@ -188,20 +204,20 @@ class AclPoolingOp : public OpKernel,
     const T* input_data = tensor_in.flat<T>().data();
     T* output_data = output->flat<T>().data();
 
-    if (this->init_layer_) {
-      arm_compute::TensorShape in_shape((unsigned int)params.tensor_in_cols,
-          (unsigned int)params.tensor_in_rows,
-          (unsigned int)params.depth);
-      arm_compute::TensorShape out_shape((unsigned int)params.out_width,
-            (unsigned int)params.out_height,
-            (unsigned int)params.out_depth);
-      checkreshape(in_shape,is_gpu_);
+    arm_compute::TensorShape in_shape((unsigned int)params.tensor_in_cols,
+        (unsigned int)params.tensor_in_rows,
+        (unsigned int)params.depth);
+    arm_compute::TensorShape out_shape((unsigned int)params.out_width,
+          (unsigned int)params.out_height,
+          (unsigned int)params.out_depth);
+    checkreshape(in_shape, is_gpu_);
+    checkreshape(out_shape, is_gpu_);
 
+    if (this->init_layer_) {
       this->init_layer_=false;
       if (is_gpu_) new_gpulayer();
       else new_cpulayer();
 
-      this->force_bypass_acl_path_ = false;
       arm_compute::PoolingLayerInfo *pool_info;
 
       arm_compute::PoolingType pool_type = is_max_pool_ ? 
@@ -218,10 +234,16 @@ class AclPoolingOp : public OpKernel,
       if (is_gpu_) {
         new_tensor(this->gpu().input, in_shape, (void*)input_data);
         new_tensor(this->gpu().output, out_shape, (void*)output_data);
+#ifdef USE_PROFILING
+        logtime_util log_time(ACL_CONFIG_INFO);
+#endif
         this->gpu().layer->configure(this->gpu().input,this->gpu().output,*pool_info);
       }else{
         new_tensor(this->cpu().input,in_shape,(void*)input_data);
         new_tensor(this->cpu().output,out_shape,(void*)output_data);
+#ifdef USE_PROFILING
+        logtime_util log_time(ACL_CONFIG_INFO);
+#endif
         this->cpu().layer->configure(this->cpu().input,this->cpu().output,*pool_info);
       }
       delete pool_info;

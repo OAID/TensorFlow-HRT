@@ -21,10 +21,6 @@ limitations under the License.
 #include "tensorflow/core/util/padding.h"
 #include "tensorflow/core/util/tensor_format.h"
 
-#ifndef USE_ACL
-#define USE_ACL 1
-#endif
-
 namespace tensorflow {
 
 using shape_inference::DimensionHandle;
@@ -542,8 +538,8 @@ REGISTER_OP("AclConv2D")
     .Output("output: T")
     .Attr("T: {float}")
     .Attr("strides: list(int)")
-    .Attr("no_bias: bool = true")
     .Attr(GetPaddingAttrString())
+    .Attr("use_cudnn_on_gpu: bool = true")
     .Attr(AclGetConvnetDataFormatAttrString())
     .Attr(AclGetConvnetFilterFormatAttrString())
     .SetShapeFn(shape_inference::Conv2DShape)
@@ -597,6 +593,7 @@ REGISTER_OP("Conv2D")
     .Attr("use_cudnn_on_gpu: bool = true")
     .Attr(GetPaddingAttrString())
     .Attr(GetConvnetDataFormatAttrString())
+    .Attr(GetConvnetFilterFormatAttrString())
     .SetShapeFn(shape_inference::Conv2DShape)
     .Doc(R"doc(
 Computes a 2-D convolution given 4-D `input` and `filter` tensors.

@@ -36,7 +36,7 @@ limitations under the License.
 #include "tensorflow/core/util/stream_executor_util.h"
 #endif  // GOOGLE_CUDA
 
-#if defined(USE_ACL) && defined(TEST_ACL)
+#if defined(USE_ACL)
 #include "tensorflow/core/kernels/acl_lrn_op.h"
 #endif
 
@@ -253,6 +253,19 @@ class LRNOp : public OpKernel {
   }
 
   void Compute(OpKernelContext* context) override {
+#if defined(USE_ACL)
+#if defined(USE_PROFILING)
+  logtime_util log_time(ACL_LRN_INFO);
+#endif //USE_PROFILING
+#if defined(TEST_ACL)
+    if (acl_lrn_op_ 
+        && !acl_lrn_op_->Bypass_acl(context)) {
+      acl_lrn_op_->Compute(context);
+      return;
+    }
+#endif
+#endif
+
     const Tensor& in = context->input(0);
     OP_REQUIRES(context, in.dims() == 4,
                 errors::InvalidArgument("in must be 4-dimensional"));
@@ -269,10 +282,6 @@ class LRNOp : public OpKernel {
                 (depth + depth_radius_) <= std::numeric_limits<int>::max(),
                 errors::InvalidArgument("depth ", depth, " + depth_radius ",
                                         depth_radius_, " exceeds int max."));
-#if defined(USE_ACL) && defined(TEST_ACL) && 0
-    if (std::is_same<T, float>::value && acl_lrn_op_)
-      return acl_lrn_op_->Compute(context);
-#endif
     Tensor* output = nullptr;
     OP_REQUIRES_OK(context,
                    context->allocate_output(

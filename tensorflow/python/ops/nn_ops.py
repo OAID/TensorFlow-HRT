@@ -1009,8 +1009,8 @@ def pool(input,  # pylint: disable=redefined-builtin
         filter_shape=window_shape)
 
 
-def acl_conv2d(input, filter, strides, padding, no_bias=True, data_format="NHWC", filter_format="OIHW", name=None):
-  return gen_nn_ops._acl_conv2d(input, filter, strides, padding, no_bias=no_bias,
+def acl_conv2d(input, filter, strides, padding, data_format="NHWC", filter_format="OIHW", name=None):
+  return gen_nn_ops._acl_conv2d(input, filter, strides, padding, use_cudnn_on_gpu=True,
         data_format=data_format, filter_format=filter_format, name="AclConv2D")
   
 def atrous_conv2d(value, filters, rate, padding, name=None):

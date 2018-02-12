@@ -2611,6 +2611,9 @@ tf_kernel_library(
 tf_kernel_library(
     name = "acl_ops_common",
     prefix = "acl_ops_common",
+    deps = [
+        ":logging",
+    ],
 )
 
 tf_kernel_library(

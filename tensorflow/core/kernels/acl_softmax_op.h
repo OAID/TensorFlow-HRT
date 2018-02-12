@@ -37,6 +37,7 @@ class AclSoftmaxOp : public OpKernel,
 
  public:
   explicit AclSoftmaxOp(OpKernelConstruction* context) : OpKernel(context) {
+    this->force_bypass_acl_path_ = bypass_acl_class_layer & FLAGS_ENABLE_ACL_SOFTMAX;
   }
 
   void Compute(OpKernelContext* context) override {
@@ -58,10 +59,10 @@ class AclSoftmaxOp : public OpKernel,
     T* output_data = softmax_out->flat<T>().data();
     const uint64 batch_size = softmax_in.dim_size(0);
     const uint64 num_classes = softmax_in.dim_size(1);
+    arm_compute::TensorShape shape(num_classes);
+    checkreshape(shape, is_gpu_);
 
     if (this->init_layer_) {
-      arm_compute::TensorShape shape(num_classes);
-      checkreshape(shape, is_gpu_);
       this->init_layer_= false;
 
       if (is_gpu_) new_gpulayer();
@@ -72,10 +73,16 @@ class AclSoftmaxOp : public OpKernel,
       if (is_gpu_) {
           new_tensor(this->gpu().input, shape, (void*)input_data);
           new_tensor(this->gpu().output, shape, (void*)output_data);
+#if defined(USE_PROFILING)
+          logtime_util log_time(ACL_CONFIG_INFO);
+#endif //USE_PROFILING
           acl_configure(this->gpu(), this->gpu().input, this->gpu().output);
       }else{
           new_tensor(this->cpu().input, shape, (void*)input_data);
           new_tensor(this->cpu().output, shape, (void*)output_data);
+#if defined(USE_PROFILING)
+          logtime_util log_time(ACL_CONFIG_INFO);
+#endif //USE_PROFILING
           acl_configure(this->cpu(), this->cpu().input, this->cpu().output);
       }
     }

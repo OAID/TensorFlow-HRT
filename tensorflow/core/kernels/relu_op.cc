@@ -33,7 +33,7 @@ typedef Eigen::GpuDevice GPUDevice;
 typedef Eigen::SyclDevice SYCLDevice;
 #endif // TENSORFLOW_USE_SYCL
 
-#if defined(USE_ACL) && defined(TEST_ACL) && 0
+#if defined(USE_ACL) && defined(TEST_ACL)
 #define REGISTER_RELU_KERNELS(type)                                   \
   REGISTER_KERNEL_BUILDER(                                            \
       Name("ReluGrad").Device(DEVICE_CPU).TypeConstraint<type>("T"),  \

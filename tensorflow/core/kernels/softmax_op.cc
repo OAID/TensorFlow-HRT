@@ -24,6 +24,10 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/kernels/softmax_op_functor.h"
 
+#if defined(USE_ACL)
+#include "tensorflow/core/kernels/acl_softmax_op.h"
+#endif
+
 namespace tensorflow {
 
 typedef Eigen::ThreadPoolDevice CPUDevice;
@@ -56,9 +60,27 @@ class SoftmaxOp : public OpKernel {
  public:
   explicit SoftmaxOp(OpKernelConstruction* context) : OpKernel(context) {
     log_ = StringPiece(type_string()).starts_with("Log");
+#if defined(TEST_ACL) && defined(USE_ACL)
+    acl_softmax_op_ = nullptr;
+    if (std::is_same<T, float>::value)
+      acl_softmax_op_ = new AclSoftmaxOp<Device, T>(context);
+#endif
   }
 
   void Compute(OpKernelContext* context) override {
+#if defined(USE_ACL)
+#if defined(USE_PROFILING)
+    logtime_util log_time(ACL_SOFTMAX_INFO);
+#endif //USE_PROFILING
+#if defined(TEST_ACL)
+    if ( !log_ 
+        && acl_softmax_op_
+        && !acl_softmax_op_->Bypass_acl(context)) {
+       acl_softmax_op_->Compute(context);
+       return;
+    }
+#endif
+#endif
     const Tensor& logits_in = context->input(0);
     OP_REQUIRES(context, TensorShapeUtils::IsMatrix(logits_in.shape()),
                 errors::InvalidArgument("logits must be 2-dimensional"));
@@ -74,6 +96,9 @@ class SoftmaxOp : public OpKernel {
 
  private:
   bool log_;
+#if defined(TEST_ACL) && defined(USE_ACL)
+  AclSoftmaxOp<Device, T>* acl_softmax_op_;
+#endif
 };
 
 #define REGISTER_CPU(T)                                          \

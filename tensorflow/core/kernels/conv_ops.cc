@@ -50,7 +50,7 @@ limitations under the License.
 #include "tensorflow/core/platform/stream_executor.h"
 #endif  // GOOGLE_CUDA
 
-#if defined(USE_ACL) && defined(TEST_ACL)
+#if defined(USE_ACL)
 #include "tensorflow/core/kernels/acl_conv_ops.h"
 #endif
 
@@ -275,14 +275,29 @@ class Conv2DOp : public BinaryOp<T> {
     OP_REQUIRES_OK(context, context->GetAttr("padding", &padding_));
 #if defined(USE_ACL) && defined(TEST_ACL)
     acl_conv2d_op_ = nullptr;
-    if (std::is_same<T, float>::value)
+    if (std::is_same<T, float>::value) { 
       acl_conv2d_op_ = new AclConv2DOp<Device, T,
         arm_compute::CLConvolutionLayer,
         arm_compute::NEConvolutionLayer>(context);
+      }
+
 #endif
   }
 
   void Compute(OpKernelContext* context) override {
+#if defined(USE_ACL)
+#if defined(USE_PROFILING)
+    logtime_util log_time(ACL_CONV_INFO);
+#endif //USE_PROFILING
+#if defined(TEST_ACL)
+    if (acl_conv2d_op_ 
+        && !acl_conv2d_op_->Bypass_acl(context)) {
+      acl_conv2d_op_->Compute(context);
+      return;
+    }
+#endif
+#endif
+
     // Input tensor is of the following dimensions:
     // [ batch, in_rows, in_cols, in_depth ]
 
@@ -373,14 +388,6 @@ class Conv2DOp : public BinaryOp<T> {
     if (out_shape.num_elements() == 0) {
       return;
     }
-#if defined(USE_ACL) && defined(TEST_ACL)
-    if (acl_conv2d_op_ &&
-        ((filter_cols ==  1 && filter_rows == 1 &&
-          pad_cols == 0 && pad_rows) ||
-         (filter_cols ==  3 && filter_rows == 3 &&
-          pad_cols <= 1 && pad_rows <= 1 )))
-      return acl_conv2d_op_->Compute(context);
-#endif
 
     // Output tensor is of the following dimensions:
     // [ in_batch, out_rows, out_cols, out_depth ]

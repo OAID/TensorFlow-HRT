@@ -34,13 +34,114 @@ limitations under the License.
 #include "arm_compute/runtime/CL/functions/CLLocallyConnectedLayer.h"
 #include "arm_compute/runtime/NEON/functions/NEBatchNormalizationLayer.h"
 #include "arm_compute/runtime/CL/functions/CLBatchNormalizationLayer.h"
-#include "arm_compute/core/NEON/kernels/NEDepthConcatenateKernel.h"
-#include "arm_compute/runtime/NEON/functions/NEDepthConcatenate.h"
-#include "arm_compute/core/CL/kernels/CLDepthConcatenateKernel.h"
-#include "arm_compute/runtime/CL/functions/CLDepthConcatenate.h"
+//#include "arm_compute/core/NEON/kernels/NEDepthConcatenateKernel.h"
+//#include "arm_compute/runtime/NEON/functions/NEDepthConcatenate.h"
+//#include "arm_compute/core/CL/kernels/CLDepthConcatenateKernel.h"
+//#include "arm_compute/runtime/CL/functions/CLDepthConcatenate.h"
 #include "arm_compute/runtime/CL/CLTensor.h"
 #include "arm_compute/runtime/Tensor.h"
 #include "arm_compute/runtime/CL/CLScheduler.h"
+
+#include "tensorflow/core/platform/logging.h"
+
+#define FLAGS_ENABLE_ACL_CONV      0x00000004
+#define FLAGS_ENABLE_ACL_MATMUL    0x00000008
+#define FLAGS_ENABLE_ACL_LRN       0x00000010
+#define FLAGS_ENABLE_ACL_POOLING   0x00000020
+#define FLAGS_ENABLE_ACL_RELU      0x00000040
+#define FLAGS_ENABLE_ACL_SIGMOID   0x00000080
+#define FLAGS_ENABLE_ACL_SOFTMAX   0x00000100
+#define FLAGS_ENABLE_ACL_TANH      0x00000200
+extern int64_t bypass_acl_class_layer;
+
+#if defined(USE_PROFILING)
+#include <sys/time.h>
+#define NANO_SEC_CONV 1000000
+
+#define MASK_LOG_APP_TIME 0x00000001
+#define MASK_LOG_ALLOCATE 0x00000002
+#define MASK_LOG_RUN      0x00000004
+#define MASK_LOG_CONFIG   0x00000008
+#define MASK_LOG_COPY     0x00000010
+#define MASK_LOG_ABSVAL   0x00000020
+#define MASK_LOG_BNLL     0x00000040
+#define MASK_LOG_CONV     0x00000080
+#define MASK_LOG_MATMUL   0x00000100
+#define MASK_LOG_LRN      0x00000200
+#define MASK_LOG_POOLING  0x00000400
+#define MASK_LOG_RELU     0x00000800
+#define MASK_LOG_SIGMOID  0x00001000
+#define MASK_LOG_SOFTMAX  0x00002000
+#define MASK_LOG_TANH     0x00004000
+#define MASK_LOG_LC       0x00008000
+#define MASK_LOG_BN       0x00010000
+#define MASK_LOG_CONCAT   0x00020000
+#define APP_TIME_INFO     MASK_LOG_APP_TIME,"time:       \t"
+#define ACL_ALLOCATE_INFO MASK_LOG_ALLOCATE,"allocate:   \t\t"
+#define ACL_RUN_INFO      MASK_LOG_RUN,     "run:        \t\t\t"
+#define ACL_CONFIG_INFO   MASK_LOG_CONFIG,  "configure:  \t\t\t\t"
+#define ACL_COPY_INFO     MASK_LOG_COPY,    "tensor_copy:\t\t\t\t\t"
+#define ACL_ABSVAL_INFO   MASK_LOG_ABSVAL,  "ACL_ABSVAL :\t\t\t\t\t\t"
+#define ACL_SOFTRELU_INFO MASK_LOG_BNLL,    "ACL_BNLL   :\t\t\t\t\t\t\t"
+#define ACL_CONV_INFO     MASK_LOG_CONV,    "ACL_CONV   :\t\t\t\t\t\t\t\t"
+#define ACL_MATMUL_INFO   MASK_LOG_MATMUL,  "ACL_MATMUL :\t\t\t\t\t\t\t\t\t"
+#define ACL_LRN_INFO      MASK_LOG_LRN,     "ACL_LRN    :\t\t\t\t\t\t\t\t\t\t"
+#define ACL_POOLING_INFO  MASK_LOG_POOLING, "ACL_POOLING:\t\t\t\t\t\t\t\t\t\t\t"
+#define ACL_RELU_INFO     MASK_LOG_RELU,    "ACL_RELU   :\t\t\t\t\t\t\t\t\t\t\t\t"
+#define ACL_SIGMOID_INFO  MASK_LOG_SIGMOID, "ACL_SIGMOID:\t\t\t\t\t\t\t\t\t\t\t\t\t"
+#define ACL_SOFTMAX_INFO  MASK_LOG_SOFTMAX, "ACL_SOFTMAX:\t\t\t\t\t\t\t\t\t\t\t\t\t\t"
+#define ACL_TANH_INFO     MASK_LOG_TANH,    "ACL_TANH   :\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t"
+#define ACL_LC_INFO       MASK_LOG_LC,      "ACL_LC     :\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t"
+#define ACL_BN_INFO       MASK_LOG_BN,      "ACL_BN     :\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t"
+#define ACL_CONCAT_INFO   MASK_LOG_CONCAT,  "ACL_CONCAT :\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t"
+extern int64_t acl_log_flags;
+
+class logtime_util
+{
+  public:
+    logtime_util(){
+        mask =0;
+    }
+    logtime_util(int mask_, const char* information_){
+      setlogtime_info(mask_,information_);
+    }
+    void setlogtime_info(int mask_, const char* information_){
+      mask = mask_;
+      if(acl_log_flags & mask){
+        strncpy(information, information_, 255);
+        gettimeofday(&tv[0], NULL);
+      }
+    }
+    ~logtime_util(){
+      if(acl_log_flags & mask){
+        long time[2];
+        gettimeofday(&tv[1], NULL);
+        time[0] = tv[0].tv_sec * NANO_SEC_CONV + tv[0].tv_usec;
+        time[1]   = tv[1].tv_sec * NANO_SEC_CONV + tv[1].tv_usec;
+        printf("%s %.6lf\n", information, (((double)time[1] - time[0]) / NANO_SEC_CONV));
+      }
+    }
+    void log_time(bool start)
+    {
+      if(acl_log_flags & mask){
+        if (start){
+          gettimeofday(&tv[0], NULL);
+        }
+        else{
+          long time[2];
+          gettimeofday(&tv[1], NULL);
+          time[0] = tv[0].tv_sec * NANO_SEC_CONV + tv[0].tv_usec;
+          time[1]   = tv[1].tv_sec * NANO_SEC_CONV + tv[1].tv_usec;
+          printf("%s %.6lf\n", information, (((double)time[1] - time[0]) / NANO_SEC_CONV));
+        }
+      }
+    }
+private:
+  struct timeval tv[2];
+  int mask;
+  char information[256];
+};
+#endif //USE_PROFILING
 
 namespace tensorflow {
 
@@ -197,12 +298,13 @@ public:
     ACLXPUBaseLayer<CPULayer,CPUTensor>& cpu(){
         return cpu_;
     }
-    bool checkreshape(arm_compute::TensorShape shape,bool gpu=false, TensorType type=tensor_input);
+    void checkreshape(arm_compute::TensorShape shape,bool gpu=false, TensorType type=tensor_input);
     void acl_run(void *input_data, void *output_data,bool gpu=false);
     template <typename ACLTensor> bool tensor_mem(ACLTensor *tensor,void *mem,bool share=false);
     template <typename ACLTensor> bool tensor_mem(void *mem,ACLTensor *tensor,bool share=false);
     template <typename ACLTensor> bool new_tensor(ACLTensor *&tensor,arm_compute::TensorShape shape,
 						  void *mem=nullptr,bool share=false);
+    virtual bool Bypass_acl(void* ctx);
 protected:
     ACLXPUBaseLayer<GPULayer,GPUTensor> gpu_;
     ACLXPUBaseLayer<CPULayer,CPUTensor> cpu_;

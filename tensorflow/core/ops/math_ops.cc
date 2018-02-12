@@ -18,10 +18,6 @@ limitations under the License.
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
-#ifndef USE_ACL
-#define USE_ACL 1
-#endif
-
 namespace tensorflow {
 
 using shape_inference::DimensionHandle;

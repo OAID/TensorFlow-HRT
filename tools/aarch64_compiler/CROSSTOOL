@@ -32,8 +32,8 @@ toolchain {
   linker_flag: "-Wl,-no-as-needed"
   linker_flag: "-Wl,-z,relro,-z,now"
   linker_flag: "-pass-exit-codes"
-  linker_flag: "-L/home/cym/project/ComputeLibrary/build"
-  linker_flag: "-L/home/cym/project/ComputeLibrary/build/opencl-1.2-stubs/"
+  linker_flag: "-L/home/username/ComputeLibrary/build"
+  linker_flag: "-L/home/username/ComputeLibrary/build/opencl-1.2-stubs/"
   linker_flag: "-larm_compute -larm_compute_graph -larm_compute_core -lOpenCL"
 
   cxx_builtin_include_directory: "/usr/aarch64-linux-gnu/include/c++/5/"
@@ -41,7 +41,7 @@ toolchain {
   cxx_builtin_include_directory: "/usr/aarch64-linux-gnu/include/"
   cxx_builtin_include_directory: "/usr/lib/gcc-cross/aarch64-linux-gnu/5/include"
   cxx_builtin_include_directory: "/usr/lib/gcc-cross/aarch64-linux-gnu/5/include-fixed"
-  cxx_builtin_include_directory: "/home/cym/project/ComputeLibrary"
+  cxx_builtin_include_directory: "/home/username/ComputeLibrary"
   cxx_builtin_include_directory: "/usr/include"
 
   objcopy_embed_flag: "-I"

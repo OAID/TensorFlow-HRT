@@ -70,6 +70,7 @@ AclPoolParameters::AclPoolParameters(OpKernelContext* context,
     pad_depth = 0;
     out_depth = depth;
   } else {
+#if !defined(TEST_ACL)
     // Our current version of depthwise max pooling does not support
     // any padding, and expects the depth_window to equal the
     // depth_stride (no overlapping).
@@ -77,6 +78,7 @@ AclPoolParameters::AclPoolParameters(OpKernelContext* context,
         context, depth % depth_window == 0,
         errors::Unimplemented("Depthwise max pooling requires the depth "
                               "window to evenly divide the input depth"));
+
     OP_REQUIRES(
         context, depth_stride == depth_window,
         errors::Unimplemented("Depthwise max pooling requires the depth "
@@ -89,15 +91,20 @@ AclPoolParameters::AclPoolParameters(OpKernelContext* context,
                                 .device_type()) == DeviceType(DEVICE_CPU)),
                 errors::Unimplemented("Depthwise max pooling is currently "
                                       "only implemented for CPU devices."));
-
+#endif
     pad_depth = 0;
     out_depth = depth / depth_window;
+    pad_cols = 0;
+    pad_rows = 0;
+    out_width = tensor_in_cols;
+    out_height = tensor_in_rows;
   }
 
+#if !defined(TEST_ACL)
   OP_REQUIRES(context, row_stride == col_stride && window_rows == window_cols &&
 		(window_rows == 2 || window_rows == 3),
 	      errors::Unimplemented("Only support row_stride = col_stride, 3x3 and 2x2 kernel."));
-  
+#endif
 }
 
 TensorShape AclPoolParameters::forward_output_shape() {

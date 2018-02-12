@@ -17,7 +17,7 @@ limitations under the License.
 #include "tensorflow/core/kernels/cwise_ops_gradients.h"
 
 namespace tensorflow {
-#if defined(USE_ACL) && defined(TEST_ACL) && 0
+#if defined(USE_ACL) && defined(TEST_ACL)
 REGISTER4(UnaryOp, CPU, "Sigmoid", functor::sigmoid, Eigen::half, double,
           complex64, complex128);
 #else

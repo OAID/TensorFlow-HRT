@@ -16,18 +16,64 @@ limitations under the License.
 
 #include "acl_ops_common.h"
 #include "arm_neon.h"
+#include "arm_compute/runtime/Scheduler.h"
+
+int64_t bypass_acl_class_layer = 0;
+
+#if defined(USE_PROFILING)
+int64_t acl_log_flags = (MASK_LOG_APP_TIME | \
+                              MASK_LOG_CONV     | \
+                              MASK_LOG_LRN      | \
+                              MASK_LOG_POOLING  | \
+                              MASK_LOG_RELU     | \
+                              MASK_LOG_SIGMOID  | \
+                              MASK_LOG_SOFTMAX  | \
+                              MASK_LOG_TANH     | \
+                              0);                                          
+#include <stdlib.h>     /* getenv */
+#endif //USE_PROFILING
 
 namespace tensorflow {
 
-static bool init_cl_env=true;
+static bool init_cl_env = true;
 template <typename GPULayer, typename CPULayer>
 ACLBaseLayer<GPULayer,CPULayer>::ACLBaseLayer()
     :init_layer_(true),force_bypass_acl_path_(false){
-    if(init_cl_env){
-        arm_compute::CLScheduler::get().default_init();
-        init_cl_env=false;
-    }
+
+  arm_compute::Scheduler::set(arm_compute::Scheduler::Type::ST);
+  if(init_cl_env){
+      try {
+          arm_compute::CLScheduler::get().default_init();
+          init_cl_env=false;
+        }
+        catch(std::exception& e)
+        {
+            LOG(ERROR) << "OPENCL initialization failed";
+        }
+  }
+
+  const char* pBypassACL = getenv ("BYPASSACL");
+  if (pBypassACL != nullptr) {
+    std::string bypass_acl(pBypassACL);
+    std::istringstream ss(bypass_acl);
+    if (!(ss >> bypass_acl_class_layer))
+      bypass_acl_class_layer = 0;
+  }
+  LOG(INFO) << "BYPASSACL: " << pBypassACL
+            << " BYPASSACL: " << bypass_acl_class_layer;
+#if defined(USE_PROFILING)
+  const char* pLogACL  = getenv("LOGACL");
+  if (pLogACL != nullptr) {
+    std::string log_acl(pLogACL);
+    std::istringstream ss2(log_acl);
+    if (!(ss2 >> acl_log_flags))
+      acl_log_flags = 0;
+  }
+  LOG(INFO) << "LOGACL: " << pLogACL
+            << " LOGACL: " << acl_log_flags;
+#endif
 }
+
 template <typename GPULayer, typename CPULayer>
 void ACLBaseLayer<GPULayer,CPULayer>::gpu_run() {
     gpu_.run(true);
@@ -35,6 +81,11 @@ void ACLBaseLayer<GPULayer,CPULayer>::gpu_run() {
 template <typename GPULayer, typename CPULayer>
 void ACLBaseLayer<GPULayer,CPULayer>::cpu_run() {
     cpu_.run(false);
+}
+
+template <typename GPULayer, typename CPULayer>
+bool ACLBaseLayer<GPULayer,CPULayer>::Bypass_acl(void* ctx) {
+    return force_bypass_acl_path_;
 }
 
 template <typename GPULayer, typename CPULayer>
@@ -51,6 +102,9 @@ template <typename ACLTensor> bool ACLBaseLayer<GPULayer,CPULayer>::new_tensor(A
 
 template <typename ACLTensor>
 void BaseTensor<ACLTensor>::commit(TensorType type){
+#if defined(USE_PROFILING)
+    logtime_util log_time(ACL_ALLOCATE_INFO);
+#endif //USE_PROFILING
     settensortype(type);
     if (!share_&&mem_) {
         if (!allocate_){ 
@@ -67,6 +121,10 @@ void BaseTensor<ACLTensor>::commit(TensorType type){
 template <typename ACLTensor>
 int BaseTensor<ACLTensor>::tensor_copy(void * mem,bool toTensor)
 {
+#if defined(USE_PROFILING)
+    logtime_util log_time(ACL_COPY_INFO);
+#endif //USE_PROFILING
+
     arm_compute::Window window;
     ACLTensor* tensor=this;
     window.use_tensor_dimensions(tensor->info()->tensor_shape(), /* first_dimension =*/arm_compute::Window::DimY); // Iterate through the rows (not each element)
@@ -127,14 +185,13 @@ void ACLBaseLayer<GPULayer,CPULayer>::acl_run(void *input_data, void *output_dat
 
 
 template <typename GPULayer, typename CPULayer>
-bool ACLBaseLayer<GPULayer,CPULayer>::checkreshape(arm_compute::TensorShape shape,bool gpu, TensorType type)
+void ACLBaseLayer<GPULayer,CPULayer>::checkreshape(arm_compute::TensorShape shape,bool gpu, TensorType type)
 {
     if (gpu) {
-        init_layer_ = gpu_.reshape(shape,type);
+        if (gpu_.reshape(shape,type)) init_layer_ = true;
     }else{
-        init_layer_ = cpu_.reshape(shape,type);
+        if (cpu_.reshape(shape,type)) init_layer_ = true;
     }
-    return init_layer_;
 }
 
 template <typename GPULayer, typename CPULayer>
@@ -201,9 +258,9 @@ INSTANTIATE_ACLBASECLASS(arm_compute::CLBatchNormalizationLayer,arm_compute::NEB
 INSTANTIATE_ACLBASECLASS(arm_compute::CLLocallyConnectedLayer,arm_compute::NELocallyConnectedLayer); 
   INSTANTIATE_ACLBASE_FUNCTION(arm_compute::CLLocallyConnectedLayer,arm_compute::NELocallyConnectedLayer,GPUTensor);
   INSTANTIATE_ACLBASE_FUNCTION(arm_compute::CLLocallyConnectedLayer,arm_compute::NELocallyConnectedLayer,CPUTensor);
-INSTANTIATE_ACLBASECLASS(arm_compute::CLDepthConcatenate,arm_compute::NEDepthConcatenate); 
-  INSTANTIATE_ACLBASE_FUNCTION(arm_compute::CLDepthConcatenate,arm_compute::NEDepthConcatenate,GPUTensor);
-  INSTANTIATE_ACLBASE_FUNCTION(arm_compute::CLDepthConcatenate,arm_compute::NEDepthConcatenate,CPUTensor);
+//INSTANTIATE_ACLBASECLASS(arm_compute::CLDepthConcatenate,arm_compute::NEDepthConcatenate); 
+//  INSTANTIATE_ACLBASE_FUNCTION(arm_compute::CLDepthConcatenate,arm_compute::NEDepthConcatenate,GPUTensor);
+//  INSTANTIATE_ACLBASE_FUNCTION(arm_compute::CLDepthConcatenate,arm_compute::NEDepthConcatenate,CPUTensor);
 
 }  // namespace tensorflow
 #endif

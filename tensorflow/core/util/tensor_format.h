@@ -23,10 +23,6 @@ limitations under the License.
 #include "tensorflow/core/lib/gtl/inlined_vector.h"
 #include "tensorflow/core/platform/types.h"
 
-#ifndef USE_ACL
-#define USE_ACL 1
-#endif
-
 namespace tensorflow {
 
 // Tensor format for input/output activations used in convolution operations.
