@@ -20,7 +20,7 @@ There are some compatibility issues between ACL and Tensorflow ops.
   In order to test TensorFlow-HRT, macro TEST_ACL is used to enable convert data format between ACL and TF at compiling.
 * ACL does not support some pooling ops, such as AvgPooling with 3x3 kernel, 1x1 stride and SAME padding.
 * ACL does not support some CONV ops, such as testConv2DKernelSmallerThanStrideSame, testConv2D2x2FilterStride2Same, ...
-* When using ACL C++ multi-thread, TF often hang. A workaround is to set ACL scheduler using ST mode.
+* When using ACL C++ multi-thread, TF often hang. ACL scheduler is set to ST mode for workaround.
 * ACL buffer round is different with TF. Both ACL round CEIL and round FLOOR are tried to get the same buffer size as TF.
   If both fail, an exception is thrown. 
 * Input/output/weight shape may be changed at inference. The shapes of all inputs must be checked before run ACL OP. 
